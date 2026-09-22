@@ -1,10 +1,27 @@
 # dsh-compact-anchor
 
-**Keep the user's own words — and what they were responding to — alive across a DSH context compaction.**
+> **Stop *asking* the model to preserve the user's words — guarantee it in code.**
+> 不再"请求"模型保留用户原话，改由**代码**保证。
 
-A DSH (DeepSeek Harness) plugin that stops *asking* the model to preserve the user's turns and *guarantees* it in code instead: after the compaction model emits its checkpoint, the harness appends a machine-generated **Turn Index** (every substantive user turn, verbatim, each with the anchor it was replying to), and optionally a **Tool Footprint** (the files and commands actually touched in the span).
+DSH（DeepSeek Harness）插件。在上下文压缩的接缝上，harness 会把两份**代码生成**的附录
+追加进 checkpoint：
 
-纯 ESM，零运行时依赖，无构建步骤。
+- **Turn Index** —— 每个用户回合**逐字**在场，短发言另附**所指锚**（它当时在回应什么）
+- **Tool Footprint**（可选）—— 这段里**真动过**哪些文件与命令
+
+**实测效果**（作者自测，非第三方基准；条件与样本量见"实测效果"一节）
+
+| 指标 | 不开 | 开 |
+|---|---|---|
+| 「所指有痕」：短发言指向的东西还找得到吗 | **≈ 0%** | **78–100%** |
+| 用户原话逐字覆盖（严格档下限） | 61.1% | **100.0%** |
+| 路径类锚点存活 | 34% | 由 footprint 补齐 |
+
+```bash
+dsh plugin --profile web add dsh-compact-anchor
+```
+
+纯 ESM · 零运行时依赖 · 无构建步骤 · 不改上游 · **`apply()` 内部绝不抛错**（DSH 契约：抛错会让整个 dsh 起不来）
 
 ---
 
