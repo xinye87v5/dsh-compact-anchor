@@ -20,4 +20,4 @@
       #   footprint:
       #     enabled: false         # opt-in: also append the tool footprint section
       #     budget: 4000           # tool footprint character budget
-      #   attestTo: ~/.dsh/reports/turn-index.jsonl
+      #   attestTo: ~/.dsh/reports/dsh-compact-anchor.jsonl
