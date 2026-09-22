@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# logs & debug output
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# packaged tarballs (npm pack)
+*.tgz
+
+# local attestation / report output, if ever written inside the repo
+reports/
+
+# editor & OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp

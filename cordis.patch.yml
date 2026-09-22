@@ -1,0 +1,23 @@
+# dsh bundle patch: inserts this plugin into a profile's layer stack.
+#
+# `dsh plugin --profile <name> add dsh-compact-anchor` installs the package and
+# appends it to `dsh.profile.bundles` (that reconciliation only happens because
+# this file is declared as `dsh.bundle.patch` in package.json). This patch is
+# then the layer that actually mounts the plugin row.
+#
+# The row id `compact-anchor` is the address a profile's own cordis.patch.yml
+# uses to override the config (last write wins per row).
+- insert:
+    - id: compact-anchor
+      name: 'dsh-compact-anchor'
+
+      # Everything below is optional and shown at its built-in default.
+      # Uncomment (here, or in the profile's own cordis.patch.yml under the
+      # same row id) to change it.
+      #
+      # config:
+      #   budget: 12000            # Turn Index character budget
+      #   footprint:
+      #     enabled: false         # opt-in: also append the tool footprint section
+      #     budget: 4000           # tool footprint character budget
+      #   attestTo: ~/.dsh/reports/turn-index.jsonl
