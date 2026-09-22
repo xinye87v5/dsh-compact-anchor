@@ -92,7 +92,7 @@ dsh plugin --profile web remove dsh-compact-anchor
 | `budget` | `12000` | Turn Index 的字符预算；超预算时**可见省略**最旧的回合 |
 | `footprint.enabled` | `false` | 是否追加「工具足迹」一节（**默认关闭**，见「已知边界」） |
 | `footprint.budget` | `4000` | 工具足迹的字符预算；超预算时可见省略并报数 |
-| `attestTo` | `$DSH_HOME/reports/turn-index.jsonl`<br>（无 `DSH_HOME` 时 `~/.dsh/reports/turn-index.jsonl`） | 存证文件路径 |
+| `attestTo` | `$DSH_HOME/reports/dsh-compact-anchor.jsonl`<br>（无 `DSH_HOME` 时 `~/.dsh/reports/dsh-compact-anchor.jsonl`） | 存证文件路径 |
 
 改配置的标准位置是 profile 自己的 `cordis.patch.yml`（`$DSH_HOME/profiles/<name>/cordis.patch.yml`），按**行 id** 命中，最后一次写入生效：
 
@@ -145,14 +145,43 @@ node --test test/*.test.mjs
 
 这些断言都做过**变异验证**（改坏实现 ⇒ 对应用例必须变红），结果记在两个测试文件的头部注释里。唯一的例外是 `looksLikePath()` 里的"数字段闸门"：它**不可达** —— 扩展名白名单已经先拒掉了所有纯数字段列表，所以它只是纵深防御，测试里按契约断言处理，不假装能证明那一行。
 
+### 装完走一遍（新终端 / 新会话）
+
+```bash
+# ① 确认装上了（这一步只改配置，插件还没加载）
+dsh plugin --profile web list | grep dsh-compact-anchor
+
+# ② **重启** —— 插件在 dsh 启动时才加载，不重启不会生效
+#    （怎么重启取决于你的启动方式；例如 systemd 用户服务：）
+systemctl --user restart dsh-web.service
+
+# ③ 开一个**新会话**，让它跑到发生一次压缩
+#    插件只在压缩调用上动作；普通对话不会产生任何注入记录
+
+# ④ 看证据（路径可用 config.attestTo 改）
+TI="$DSH_HOME/reports/dsh-compact-anchor.jsonl"
+grep '"kind":"mounted"' "$TI" | tail -1              # 挂上了吗
+grep '"kind":"turn-index-injected"' "$TI" | tail -3  # 真的注入了吗
+```
+
+**三步各有各的失败方式**，别把上一步的成功当成下一步的成功：
+
+| 症状 | 含义 | 修 |
+|---|---|---|
+| `mounted` 都没有 | 没挂上 | 看有没有 `not-mounted` / `mount-deferred`，它们会写明原因 |
+| 有 `mounted`、无 `turn-index-injected` | 挂上了，但**这段时间没发生过压缩** | 不是故障；等一次压缩或手动触发 |
+| 两者都有 | ✅ 生效 | 打开 checkpoint，尾部应有 `## Turn Index` |
+
+挂载是可重试的（见下节），所以 `mount-deferred` 出现在启动早期是**正常的**。
+
 ### 在生产里确认它真的生效
 
 ```bash
 # 挂载成功（含配置状态）
-grep '"kind":"mounted"' "$DSH_HOME/reports/turn-index.jsonl" | tail -1
+grep '"kind":"mounted"' "$DSH_HOME/reports/dsh-compact-anchor.jsonl" | tail -1
 
 # 每次真实注入：回合数、字符数、是否带工具足迹
-grep '"kind":"turn-index-injected"' "$DSH_HOME/reports/turn-index.jsonl" | tail -3
+grep '"kind":"turn-index-injected"' "$DSH_HOME/reports/dsh-compact-anchor.jsonl" | tail -3
 ```
 
 判据是**证据**，不是"文件里写了"。只有 `mounted` 而没有 `turn-index-injected`，说明这个会话里没发生过压缩；一条都没有，说明没挂上（`not-mounted` / `mount-deferred` 会写明原因）。
@@ -179,7 +208,7 @@ grep '"kind":"turn-index-injected"' "$DSH_HOME/reports/turn-index.jsonl" | tail 
 - **Turn Index 只覆盖当前这次被压缩的面**：更早的、已经压过的回合不在 `messages` 里，也就不会出现在这次附录中。
 - **工具足迹默认关闭**：它会改变 checkpoint 的内容面（多出一节），属于"改动生产行为"的一类，请显式打开。
 - **本插件不改模型的输出**：附录是 harness 追加的。压缩模型写什么还是什么 —— 所以它治的是"用户发言与所指"，不是"摘要质量"。
-- **存证文件只含元数据**：`turn-index.jsonl` 里是时间、pid、插件名、回合数、字符数、配置状态与错误原因，**不含任何用户发言或工具参数内容**。若把 `attestTo` 指到共享目录，请照此评估。
+- **存证文件只含元数据**：`dsh-compact-anchor.jsonl` 里是时间、pid、插件名、回合数、字符数、配置状态与错误原因，**不含任何用户发言或工具参数内容**。若把 `attestTo` 指到共享目录，请照此评估。
 
 ## 关于 `dsh.bundle`
 

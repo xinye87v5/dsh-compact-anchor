@@ -198,7 +198,7 @@ export function apply(ctx, config) {
   const fpBudget = Number(config?.footprint?.budget ?? 4000)
   const attestTo = typeof config?.attestTo === 'string' && config.attestTo.length > 0
     ? config.attestTo
-    : join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'reports', 'turn-index.jsonl')
+    : join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'reports', 'dsh-compact-anchor.jsonl')
   const attest = (record) => {
     try {
       mkdirSync(dirname(attestTo), { recursive: true })
