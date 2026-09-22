@@ -46,7 +46,7 @@ dsh plugin --profile web add dsh-compact-anchor
 dsh plugin --profile web add dsh-compact-anchor
 
 # ② 从本仓库的本地路径（monorepo 里的子目录用这条）
-dsh plugin --profile web add /path/to/dsh-plugins/仓库根
+dsh plugin --profile web add /path/to/dsh-compact-anchor
 
 # ③ 从 tarball（打一个包再装，适合不走 registry 的场合）
 cd 仓库根 && npm pack
