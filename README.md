@@ -41,15 +41,22 @@ dsh plugin --profile web add dsh-compact-anchor
 
 前提：DSH 已安装，profile 已存在（没有会自动初始化），`pnpm` 在 PATH 上。
 
+> ⚠️ **本包尚未发布到 npm。** 所以下面的 ① 与 ② 是现在就能用的；③ 等发布之后。
+
 ```bash
-# ① 从 npm（推荐；发布后可用）
+# ① 克隆后从本地路径装（当前可用，推荐）
+git clone https://github.com/xinye87v5/dsh-compact-anchor.git
+dsh plugin --profile web add ./dsh-compact-anchor
+
+# ② 直接指向 GitHub 仓库（pnpm 的 github: 简写；作者未在本机验证，
+#    若失败请用 ①）
+dsh plugin --profile web add github:xinye87v5/dsh-compact-anchor
+
+# ③ 从 npm —— **尚未发布**，发布后可用
 dsh plugin --profile web add dsh-compact-anchor
 
-# ② 从本仓库的本地路径（monorepo 里的子目录用这条）
-dsh plugin --profile web add /path/to/dsh-compact-anchor
-
-# ③ 从 tarball（打一个包再装，适合不走 registry 的场合）
-cd 仓库根 && npm pack
+# ④ 从 tarball（不走 registry 的场合）
+npm pack
 dsh plugin --profile web add ./dsh-compact-anchor-0.1.0.tgz
 ```
 

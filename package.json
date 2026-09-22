@@ -46,5 +46,13 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xinye87v5/dsh-compact-anchor.git"
+  },
+  "homepage": "https://github.com/xinye87v5/dsh-compact-anchor#readme",
+  "bugs": {
+    "url": "https://github.com/xinye87v5/dsh-compact-anchor/issues"
   }
 }
