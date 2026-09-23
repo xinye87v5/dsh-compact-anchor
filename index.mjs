@@ -173,7 +173,17 @@ export function buildTurnIndex(messages, budget = DEFAULT_BUDGET) {
 }
 
 /** 纯函数：改写压缩指令（把逐条枚举用户回合的活儿从模型手里拿走，交给 harness）。 */
-export function rewriteInstruction(options) {
+/**
+ * 改写压缩指令，并**顺带**把 Turn Index 算好返回。
+ *
+ * ⚠️ `budget` 必须从调用方传进来（2026-09-23 修）：此前本函数内部写死
+ * `buildTurnIndex(messages)`，于是 `config.budget` **完全失效** —— 不论配多少都用
+ * `DEFAULT_BUDGET`。生产之所以没暴露，只因为 patch 里写的恰好等于默认值。
+ * 存证还把"配置值"与"默认值算出的 chars"并排打印，看着像生效了。
+ * @param options - `{ purpose, messages }`
+ * @param budget - Turn Index 的字符预算
+ */
+export function rewriteInstruction(options, budget = DEFAULT_BUDGET) {
   if (options?.purpose !== 'compaction') return null   // 自我防护：不靠调用方先判断用途
   const messages = options?.messages
   if (!Array.isArray(messages) || messages.length === 0) return null
@@ -189,7 +199,7 @@ export function rewriteInstruction(options) {
           ? m.content.map((b) => (b?.type === 'text' ? { ...b, text: IMPROVED_COMPACTION_INSTRUCTION } : b))
           : [{ type: 'text', text: IMPROVED_COMPACTION_INSTRUCTION }],
       }
-      return { messages: next, index: i, turns: buildTurnIndex(messages) }
+      return { messages: next, index: i, turns: buildTurnIndex(messages, budget) }
     }
   }
   return null
@@ -250,7 +260,7 @@ export function apply(ctx, config) {
     try {
       if (options?.purpose !== 'compaction') return originalStream.call(this, options, ...rest)
       stats.seen++
-      const r = rewriteInstruction(options)
+      const r = rewriteInstruction(options, budget)
       if (!r) { stats.passthrough++; return originalStream.call(this, options, ...rest) }
       const fp = fpEnabled ? buildFootprint(r.messages, fpBudget) : { text: '', files: 0, commands: 0, omitted: 0, chars: 0 }
       const appendix = [r.turns.text, fp.text].filter(Boolean).join('\n\n')

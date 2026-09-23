@@ -186,6 +186,27 @@ test('2c. 保留的是最近的回合', () => {
     assert.ok(r.text.startsWith('## Turn Index'), '标题必须完整')
   })
 
+  // ── 3x. budget 必须真的接进索引 ──────────────────────────────────────────
+  // 2026-09-23 修：`rewriteInstruction` 内部写死 `buildTurnIndex(messages)`，
+  // 于是 `config.budget` **完全失效**，不论配多少都用默认值。生产没暴露只因
+  // patch 里写的恰好等于默认值；存证还把配置值与默认值算出的 chars 并排打印。
+  // 这条断言就是那次断路的回归守卫：**两种预算必须给出不同结果**。
+  test('3x. budget 真的接进索引（曾因调用点丢参而完全失效）', () => {
+    const many = []
+    for (let i = 0; i < 60; i++) {
+      many.push(U(`这是第 ${i} 条用户发言，内容也有一定长度用来把预算撑满。`))
+      many.push(AText(`第 ${i} 轮的回答内容。`))
+    }
+    many.push(U(OFFICIAL))          // 压缩指令标记：rewriteInstruction 靠它定位
+    const opts = { purpose: 'compaction', messages: many }
+    const wide = rewriteInstruction(opts, 24000)
+    const narrow = rewriteInstruction(opts, 400)
+    assert.notEqual(wide.turns.chars, narrow.turns.chars,
+      '两种预算给出相同结果 ⇒ budget 没接进 buildTurnIndex')
+    assert.ok(narrow.turns.chars <= 400, `chars=${narrow.turns.chars}`)
+    assert.ok(narrow.turns.omitted > 0, '窄预算必须触发省略')
+  })
+
 // ── 2d. 分层降级：预算紧张时**先牺牲锚，不牺牲用户正文** ─────────────────────
 
 function bulkedMessages() {
