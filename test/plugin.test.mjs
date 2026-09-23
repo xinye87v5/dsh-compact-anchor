@@ -26,7 +26,7 @@
 
 import { test } from 'node:test'
 import { strict as assert } from 'node:assert'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildTurnIndex, rewriteInstruction, apply } from '../index.mjs'
@@ -44,7 +44,20 @@ const FIXTURE_USER_LONG = '帮我看看这个仓库的结构，重点是 src 目
 const OFFICIAL = 'You are now acting as a compaction engine for this AI coding assistant. Condense the conversation ABOVE into a structured checkpoint that lets another model resume the work with no loss of essential context.\n\n## Primary Request and Intent\n- [x]'
 
 /** 每个用例一个独立的存证目录，避免污染 $HOME 也不互相干扰。 */
-const tmpAttest = () => join(mkdtempSync(join(tmpdir(), 'compact-anchor-')), 'attest.jsonl')
+const TMPDIRS = []
+// 每个用例都会建一个独立的存证目录，因此需要在进程退出时统一回收 ——
+// 否则临时目录会随运行次数不断累积。注册式写法在断言中途失败时同样生效；
+// 回收失败只影响该目录自身，不改变测试结果。
+process.on('exit', () => {
+  for (const d of TMPDIRS) {
+    try { rmSync(d, { recursive: true, force: true }) } catch { /* 已被其他路径回收 */ }
+  }
+})
+const tmpAttest = () => {
+  const d = mkdtempSync(join(tmpdir(), 'compact-anchor-'))
+  TMPDIRS.push(d)
+  return join(d, 'attest.jsonl')
+}
 
 function baseMessages() {
   return [
