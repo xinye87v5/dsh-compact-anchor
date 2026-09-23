@@ -143,6 +143,21 @@ test('5b. 超预算必须报告省略数量（不是静默硬截断）', () => {
   assert.match(text, /另有 \d+ 项因预算省略/)
 })
 
+  // 预算边界不变式（与 buildTurnIndex 同一规则）：chars ≤ budget；放不下就不注入；
+  // 单条过长则显式标注截断。旧实现在收尾处无条件切尾，会切掉尾部条目且 chars 超预算 1。
+  test('budget 边界：chars ≤ budget、放不下不注入、过长显式截断', () => {
+    for (const b of [4000, 600, 200, 120, 90, 60, 20]) {
+      const r = buildFootprint(manyFiles(), b)
+      assert.ok(r.chars <= b, `budget=${b} 却 chars=${r.chars}`)
+    }
+    const tiny = buildFootprint(manyFiles(), 20)
+    assert.equal(tiny.text, '')
+    assert.equal(tiny.chars, 0)
+    const tight = buildFootprint(manyFiles(), 120)
+    assert.ok(tight.chars <= 120)
+    if (tight.text) assert.match(tight.text, /本项过长/)
+  })
+
 // ── 6. 空输入 ⇒ 空文本（**不注入空壳标题**）────────────────────────────────
 
 test('6. 无工具调用时不产生任何文本', () => {

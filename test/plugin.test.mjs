@@ -156,6 +156,36 @@ test('2c. 保留的是最近的回合', () => {
   assert.ok(r.text.includes('第 59 条用户发言'))
 })
 
+  // ── 2e–2g. 预算边界不变式 ────────────────────────────────────────────────
+  // 旧实现在收尾处无条件 `text.slice(0, budget)`：切的是**尾部**，而尾部正是最新回合
+  // 与省略提示所在 ⇒ budget=40 会吐出「一个被切断的标题、零个回合」，`chars` 还比预算大 1。
+  // 触发条件不止极小预算：**最新一条用户发言本身长于预算**（一次长日志粘贴）同样走到那里。
+  test('2e. 任何预算下 chars ≤ budget', () => {
+    const many = []
+    for (let i = 0; i < 20; i++) { many.push(U(`第 ${i} 条用户发言，写长一点。`)); many.push(AText(`回答 ${i}`)) }
+    many.push(U('这是最新的一条用户发言'))
+    for (const b of [5000, 2000, 400, 200, 120, 90, 80, 60, 40, 10]) {
+      const r = buildTurnIndex(many, b)
+      assert.ok(r.chars <= b, `budget=${b} 却 chars=${r.chars}`)
+    }
+  })
+
+  test('2f. 放不下就不注入（残片比不注入更糟）', () => {
+    const many = []
+    for (let i = 0; i < 20; i++) { many.push(U(`第 ${i} 条用户发言，写长一点。`)); many.push(AText(`回答 ${i}`)) }
+    const r = buildTurnIndex(many, 40)
+    assert.equal(r.text, '', '极小预算应返回空串，而不是一个被切断的标题')
+    assert.equal(r.chars, 0)
+    assert.ok(r.omitted > 0, '应如实报告被省略的回合数')
+  })
+
+  test('2g. 单条长于预算时显式标注截断，而不是静默切尾', () => {
+    const r = buildTurnIndex([U('Y'.repeat(20000))], 12000)
+    assert.ok(r.chars <= 12000, `chars=${r.chars}`)
+    assert.match(r.text, /本条过长，已截断/)
+    assert.ok(r.text.startsWith('## Turn Index'), '标题必须完整')
+  })
+
 // ── 2d. 分层降级：预算紧张时**先牺牲锚，不牺牲用户正文** ─────────────────────
 
 function bulkedMessages() {

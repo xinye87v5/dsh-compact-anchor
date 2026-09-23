@@ -35,6 +35,8 @@ const KNOWN_EXT = new Set([
 ])
 
 const HEADING = '## Tool Footprint (harness-generated, files & commands touched)'
+// 同一规则见 index.mjs：单条放不下时显式标注，而不是静默切尾
+const TRUNC_MARK = '…（本项过长，已截断）'
 
 const FILE_TOOLS = new Set(['read', 'edit', 'write', 'read_image', 'notebook_edit', 'multi_edit'])
 const SEARCH_TOOLS = new Set(['grep', 'glob'])
@@ -248,8 +250,18 @@ export function buildFootprint(messages, budget = 4000) {
   if (otherItems.length) pushAll('其它工具', otherItems, budget)
 
   if (lines.length === 0) return empty
-  let text = HEADING + '\n' + lines.join('\n') + '\n'
-  if (omitted > 0) text += `- … 另有 ${omitted} 项因预算省略\n`
-  if (text.length > budget) text = text.slice(0, budget) + '\n'
+  // 收尾：与 buildTurnIndex 同一规则（见该处注释）——省略提示永不丢、显式截断、
+  // 放不下就不注入，任何情况下 chars ≤ budget。旧实现在这里同样是无条件切尾。
+  const notice = omitted > 0 ? `- … 另有 ${omitted} 项因预算省略'\n'` : ''
+  const fixed = HEADING.length + 1 + notice.length
+  if (budget < fixed + TRUNC_MARK.length + 1) {
+    return { text: '', files: files.size, commands: commands.size, omitted: omitted + lines.length, chars: 0 }
+  }
+  let body = lines.join('\n')
+  if (fixed + body.length + 1 > budget) {
+    const room = Math.max(0, budget - fixed - TRUNC_MARK.length - 1)
+    body = body.slice(0, room) + TRUNC_MARK
+  }
+  const text = HEADING + '\n' + body + '\n' + notice
   return { text, files: files.size, commands: commands.size, omitted, chars: text.length }
 }

@@ -50,6 +50,8 @@ const HEADING = '## Turn Index (harness-generated, verbatim user turns)'
 const DEFAULT_BUDGET = 12000
 const ANCHOR_CMD_CHARS = 60
 const ANCHOR_TEXT_CHARS = 300
+// 单条正文放不进预算时的显式标记 —— 宁可写明已截断，也不静默切尾
+const TRUNC_MARK = '…（本条过长，已截断）'
 
 function textOf(content) {
   if (typeof content === 'string') return content
@@ -148,10 +150,26 @@ export function buildTurnIndex(messages, budget = DEFAULT_BUDGET) {
     kept = kept.slice(1)
     omitted++
   }
-  let text = HEADING + '\n' + kept.join('\n') + '\n'
-  if (omitted > 0) text += omittedLine(omitted)
-  if (text.length > budget) text = text.slice(0, budget) + '\n'
-  return { text, turns: entries.length, omitted, chars: text.length }
+    // ── 收尾：省略提示与最新回合一粒都不能被切掉 ──────────────────────────
+    // 旧实现在这里无条件 `text.slice(0, budget)`，切的是**尾部** —— 而尾部正是省略提示
+    // 与最新回合所在。实测 budget=40 会退化成「一个被切断的标题、零个回合」，且 `chars`
+    // 比预算还大 1（多出收尾的换行）。触发条件不止极小预算：**只要最新一条用户发言
+    // 本身长于预算**（一次长日志/报告粘贴），循环就停在 `kept.length === 1` 且仍超预算。
+    // 新规则：① 任何情况下 chars ≤ budget ② 省略提示永不丢 ③ 单条放不下就**显式截断
+    // 并标注** ④ 连最低限度都放不下就**不注入** —— 一个自称 Turn Index 却没有任何回合的
+    // 残片，比不注入更糟（占预算、且让人以为保留生效了）。
+    const notice = omitted > 0 ? omittedLine(omitted) : ''
+    const fixed = HEADING.length + 1 + notice.length
+    if (budget < fixed + TRUNC_MARK.length + 1) {
+      return { text: '', turns: entries.length, omitted: entries.length, chars: 0 }
+    }
+    let body = kept.join('\n')
+    if (fixed + body.length + 1 > budget) {
+      const room = Math.max(0, budget - fixed - TRUNC_MARK.length - 1)
+      body = body.slice(0, room) + TRUNC_MARK
+    }
+    const text = HEADING + '\n' + body + '\n' + notice
+    return { text, turns: entries.length, omitted, chars: text.length }
 }
 
 /** 纯函数：改写压缩指令（把逐条枚举用户回合的活儿从模型手里拿走，交给 harness）。 */
