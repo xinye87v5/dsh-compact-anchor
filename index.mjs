@@ -255,16 +255,49 @@ export function apply(ctx, config) {
 
   const originalStream = llm.stream
   const stats = { seen: 0, injected: 0, passthrough: 0, errors: 0 }
+  // 诊断（2026-09-23，docs/53 §八）：压缩调用究竟以什么 purpose 进来。
+  // 若它不以 'compaction' 进来，下面的改写逻辑根本不会被执行 —— 而那种情况此前
+  // 是完全不可见的（没有注入记录 ≠ 没发生压缩）。每个新 purpose 只落一条，噪声有界。
+  const purposesSeen = new Set()
 
   const patched = function stream(options, ...rest) {
     try {
+      const purpose = options?.purpose
+      if (!purposesSeen.has(purpose)) {
+        purposesSeen.add(purpose)
+        attest({ kind: 'stream-purpose-seen', purpose: purpose ?? null,
+          messageCount: Array.isArray(options?.messages) ? options.messages.length : null })
+      }
       if (options?.purpose !== 'compaction') return originalStream.call(this, options, ...rest)
       stats.seen++
       const r = rewriteInstruction(options, budget)
-      if (!r) { stats.passthrough++; return originalStream.call(this, options, ...rest) }
+      if (!r) {
+        stats.passthrough++
+        const msgs = Array.isArray(options?.messages) ? options.messages : null
+        const tail = msgs ? msgs.slice(-3) : []
+        attest({ kind: 'turn-index-miss',
+          why: msgs === null ? 'messages-not-array' : 'no-original-marker',
+          messageCount: msgs ? msgs.length : null,
+          tailRoles: tail.map((m) => m?.role ?? null),
+          lastUserHead: (() => {
+            for (let k = (msgs?.length ?? 0) - 1; k >= 0; k--) {
+              if (msgs[k]?.role === 'user') return textOf(msgs[k].content).slice(0, 120)
+            }
+            return null
+          })() })
+        return originalStream.call(this, options, ...rest)
+      }
       const fp = fpEnabled ? buildFootprint(r.messages, fpBudget) : { text: '', files: 0, commands: 0, omitted: 0, chars: 0 }
       const appendix = [r.turns.text, fp.text].filter(Boolean).join('\n\n')
-      if (!appendix) { stats.passthrough++; return originalStream.call(this, options, ...rest) }
+      if (!appendix) {
+        stats.passthrough++
+        // 诊断（2026-09-23，docs/53 §八）：改写成功但附录为空 —— 最可能是
+        // `buildTurnIndex` 在这段压缩输入里**一个真用户回合都没找到**（索引为空）。
+        // 这条路径此前完全静默：既没有 injected 也没有 miss，看起来像"插件没生效"。
+        attest({ kind: 'turn-index-empty', rewrote: r !== null, instructionIndex: r?.index ?? null,
+          turns: r?.turns?.turns ?? null, chars: r?.turns?.chars ?? null, budget })
+        return originalStream.call(this, options, ...rest)
+      }
 
       const nextOptions = { ...options, messages: r.messages }
       const inner = originalStream.call(this, nextOptions, ...rest)
