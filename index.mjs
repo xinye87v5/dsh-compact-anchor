@@ -329,10 +329,18 @@ export function apply(ctx, config) {
         let emitted = false
         let lastTextIndex = null
         let sawBlockEnd = false
+        // 诊断（2026-09-23，docs/53 §十二）：注入记账只表示「打算注入」。
+        // 压缩尝试**会中途被腰斩**（实测中止那次的流只活了 4.6 秒，正常要 96 秒），
+        // 而那种情况下本函数原本**什么都不记**（emitted 为真就静默结束）⇒ 存证把尝试记成了落地。
+        // 流里观测不到「checkpoint 是否落盘」，但**「生成是否跑完」观测得到** —— 就看有没有 finish。
+        let sawFinish = false
+        let chunks = 0
         const emit = (index) => ({ type: 'text-delta', index: index ?? 0, text: '\n\n' + appendix })
 
         try {
           for await (const chunk of inner) {
+            chunks++
+            if (chunk?.type === 'finish') sawFinish = true
             if (!emitted) {
               if (chunk?.type === 'text-delta') { lastTextIndex = chunk.index; yield chunk; continue }
               if (chunk?.type === 'block-end' && chunk.block?.type === 'text') {
@@ -355,9 +363,10 @@ export function apply(ctx, config) {
             stats.errors++
             attest({ kind: 'turn-index-error', reason: '流结束但未找到注入点', sawBlockEnd, lastTextIndex })
           }
+          attest({ kind: 'turn-index-stream-end', nth: stats.injected, sawFinish, emitted, chunks })
         } catch (e) {
           stats.errors++
-          attest({ kind: 'turn-index-error', reason: `流中异常: ${e?.message ?? e}`, emitted })
+          attest({ kind: 'turn-index-error', reason: `流中异常: ${e?.message ?? e}`, emitted, sawFinish, chunks })
           throw e
         }
       }

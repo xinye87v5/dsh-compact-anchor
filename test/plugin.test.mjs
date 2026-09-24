@@ -26,7 +26,7 @@
 
 import { test } from 'node:test'
 import { strict as assert } from 'node:assert'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildTurnIndex, rewriteInstruction, apply } from '../index.mjs'
@@ -402,4 +402,29 @@ test('6b. 重试驱动生效：附录真的被注入（可观察行为，非恒�
   for await (const c of llm.stream({ purpose: 'compaction', messages: baseMessages() })) out.push(c)
   assert.ok(out.some((c) => c.type === 'text-delta' && String(c.text).includes('## Turn Index')))
   assert.equal(calls.length, 1, '确实拦到了一次 compaction 调用')
+})
+
+// ── 4x. 流收尾证：注入之后能不能看出「跑完 vs 被腰斩」───────────────────────
+// 2026-09-23（docs/53 §十二）：`turn-index-injected` 只表示「打算注入」。
+// 实测压缩尝试会中途被腰斩（中止那次的流只活了 4.6 秒，正常要 96 秒），
+// 而那种情况下此前**什么都不记**（emitted 为真就静默结束）⇒ 存证把尝试记成了落地。
+// 流里看不到「checkpoint 是否落盘」，但「生成是否跑完」看得到 —— 就看有没有 finish。
+test('4x. 流收尾证区分「跑完」与「被腰斩」', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'compact-anchor-'))
+  TMPDIRS.push(dir)
+  const att = join(dir, 'attest.jsonl')
+  const run = async (chunks) => {
+    const llm = { stream() { return (async function* () { for (const c of chunks) yield c })() } }
+    const fakeCtx = { get: (n) => (n === 'llm' ? llm : null), effect: undefined }
+    apply(fakeCtx, { attestTo: att })
+    for await (const _ of llm.stream({ purpose: 'compaction', messages: baseMessages() })) { /* drain */ }
+  }
+  await run(BLOCK_END_CHUNKS)                                    // 含 finish
+  await run(BLOCK_END_CHUNKS.filter((c) => c.type !== 'finish')) // 腰斩
+  const recs = readFileSync(att, 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+  const ends = recs.filter((r) => r.kind === 'turn-index-stream-end')
+  assert.equal(ends.length, 2, '每次注入都应有一条收尾证')
+  assert.equal(ends[0].sawFinish, true, '含 finish 的流应记成跑完')
+  assert.equal(ends[1].sawFinish, false, '没有 finish 的流必须记成未跑完')
+  assert.equal(ends[1].emitted, true, '腰斩前仍应已注入（这正是此前被误记成成功的情形）')
 })
